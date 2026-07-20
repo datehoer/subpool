@@ -1,0 +1,36 @@
+## SubPool example config (conflag format: KEY=VALUE)
+## 启动: subpool -config ./subpool.conf
+
+# 本地监听（可写多行）
+l=mixed://:6666
+# l=mixed://user:pass@:6666
+
+# 订阅（URL 或文件，可多行）
+# u=https://example.com/subscribe?token=xxx
+# f=./nodes.yaml
+
+# 调度: rr | random | wrr | ha | lha | dh
+s=rr
+
+# 拨号失败换节点次数
+dr=3
+
+# 订阅刷新秒数（0=关闭）
+ri=3600
+
+# 节点健康检查
+c=http://www.msftconnecttest.com/connecttest.txt#expect=200
+ci=600
+ct=10
+
+# 日志
+level=info
+# log=./logs/subpool.log
+# log-nostd=false
+# access-log=false
+
+# 统计 HTTP（空=关闭）
+# stats=127.0.0.1:9090
+
+# 详细（等价 level=debug）
+# v=false

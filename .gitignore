@@ -1,0 +1,22 @@
+# Build artifacts
+/subpool
+/dist/
+*.exe
+*.test
+*.out
+
+# Local config & runtime (may contain subscription secrets)
+subpool.conf
+logs/
+*.log
+
+# Go
+vendor/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db

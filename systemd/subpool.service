@@ -1,0 +1,19 @@
+[Unit]
+Description=SubPool subscription proxy pool
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/subpool
+ExecStart=/opt/subpool/subpool -config /opt/subpool/subpool.conf
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+# 可选：降权用户
+# User=proxy
+# Group=proxy
+
+[Install]
+WantedBy=multi-user.target

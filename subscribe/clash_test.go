@@ -73,6 +73,53 @@ func TestParseAndConvertClash(t *testing.T) {
 	}
 }
 
+func TestClashSSSimpleObfs(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "http obfs",
+			yaml: `
+proxies:
+  - {name: ss-obfs-http, type: ss, server: 1.2.3.4, port: 443, cipher: aes-256-gcm, password: secret, plugin: obfs, plugin-opts: {mode: http, host: cdn.example.com}}
+`,
+			want: "simple-obfs://1.2.3.4:443?host=cdn.example.com&type=http,ss://aes-256-gcm:secret@",
+		},
+		{
+			name: "tls obfs alias",
+			yaml: `
+proxies:
+  - {name: ss-obfs-tls, type: ss, server: 2001:db8::1, port: 8443, cipher: chacha20-ietf-poly1305, password: "p@ss", plugin: simple-obfs, plugin-opts: {mode: tls, host: edge.example.com}}
+`,
+			want: "simple-obfs://[2001:db8::1]:8443?host=edge.example.com&type=tls,ss://chacha20-ietf-poly1305:p%40ss@",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fwds, err := ParseClashYAML([]byte(tt.yaml))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(fwds) != 1 || fwds[0] != tt.want {
+				t.Fatalf("want %q, got %#v", tt.want, fwds)
+			}
+		})
+	}
+}
+
+func TestClashSSUnsupportedPlugin(t *testing.T) {
+	_, err := ParseClashYAML([]byte(`
+proxies:
+  - {name: ss-v2ray, type: ss, server: 1.2.3.4, port: 443, cipher: aes-256-gcm, password: secret, plugin: v2ray-plugin}
+`))
+	if err == nil || !strings.Contains(err.Error(), "ss(plugin)") {
+		t.Fatalf("want unsupported plugin error, got %v", err)
+	}
+}
+
 func TestParseRealClashFiles(t *testing.T) {
 	for _, p := range []string{
 		"/home/proxy/dy.5468936.xyz.yaml",

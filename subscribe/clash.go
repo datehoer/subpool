@@ -191,10 +191,6 @@ func clashHy2(p ClashProxy) (string, error) {
 }
 
 func clashSS(p ClashProxy) (string, error) {
-	if p.Plugin != "" {
-		// glider has limited plugin support; skip complex plugins
-		return "", fmt.Errorf("ss plugin not supported: %s", p.Plugin)
-	}
 	cipher := p.Cipher
 	if cipher == "" {
 		cipher = "aes-256-gcm"
@@ -203,7 +199,60 @@ func clashSS(p ClashProxy) (string, error) {
 	if pass == "" {
 		return "", fmt.Errorf("ss missing password: %s", p.Name)
 	}
-	return fmt.Sprintf("ss://%s:%s@%s", cipher, urlUserInfoEscape(pass), joinHostPort(p.Server, p.Port)), nil
+
+	plugin := strings.ToLower(strings.TrimSpace(p.Plugin))
+	if plugin == "" {
+		return fmt.Sprintf("ss://%s:%s@%s", cipher, urlUserInfoEscape(pass), joinHostPort(p.Server, p.Port)), nil
+	}
+
+	switch plugin {
+	case "obfs", "simple-obfs", "simple_obfs":
+		return clashSSSimpleObfs(p, cipher, pass)
+	default:
+		return "", fmt.Errorf("ss plugin not supported: %s", p.Plugin)
+	}
+}
+
+func clashSSSimpleObfs(p ClashProxy, cipher, pass string) (string, error) {
+	mode := strings.ToLower(pluginOpt(p.PluginOpts, "mode"))
+	if mode == "" {
+		mode = "http"
+	}
+	if mode != "http" && mode != "tls" {
+		return "", fmt.Errorf("ss plugin obfs mode not supported: %s", mode)
+	}
+
+	host := pluginOpt(p.PluginOpts, "host")
+	if host == "" {
+		host = p.Server
+	}
+
+	transport := &url.URL{
+		Scheme: "simple-obfs",
+		Host:   joinHostPort(p.Server, p.Port),
+	}
+	q := url.Values{}
+	q.Set("type", mode)
+	q.Set("host", host)
+	if uri := pluginOpt(p.PluginOpts, "uri"); uri != "" {
+		q.Set("uri", normalizePath(uri))
+	}
+	if ua := pluginOpt(p.PluginOpts, "ua"); ua != "" {
+		q.Set("ua", ua)
+	}
+	transport.RawQuery = q.Encode()
+
+	ss := fmt.Sprintf("ss://%s:%s@", cipher, urlUserInfoEscape(pass))
+	return transport.String() + "," + ss, nil
+}
+
+func pluginOpt(opts map[string]interface{}, key string) string {
+	for k, v := range opts {
+		if strings.EqualFold(strings.TrimSpace(k), key) {
+			return strings.TrimSpace(anyToString(v))
+		}
+	}
+	return ""
 }
 
 func clashSSR(p ClashProxy) (string, error) {

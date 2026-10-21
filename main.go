@@ -66,8 +66,12 @@ func main() {
 	}
 
 	if conf.StatsAddr != "" {
-		startStatsServer(conf.StatsAddr, hot)
+		startStatsServer(conf.StatsAddr, hot, conf)
 	}
+	if conf.WatchInterval > 0 {
+		startWatchdog(conf, hot)
+	}
+	notifySystemd(hot)
 
 	if conf.RefreshInterval > 0 {
 		go func() {
@@ -95,8 +99,9 @@ func main() {
 	xlog.Infof("[main] shutting down (%v)", sig)
 }
 
-func reload(hot *pool.HotPool, conf *Config, fatalOnEmpty bool) error {
+func reload(hot *pool.HotPool, conf *Config, fatalOnEmpty bool) (err error) {
 	forwards, err := subscribe.LoadAll(conf.SubURLs, conf.SubFiles)
+	defer func() { noteRefresh(len(forwards), err) }()
 	if err != nil {
 		return err
 	}

@@ -23,14 +23,16 @@ type Config struct {
 	DialRetries     int
 
 	// logging
-	LogLevel   string // debug|info|warn|error
-	LogFile    string // path or dir; empty = stderr only
-	LogNoStd   bool   // if true with LogFile, do not also write stderr
-	AccessLog  bool   // per-dial access lines
+	LogLevel  string // debug|info|warn|error
+	LogFile   string // path or dir; empty = stderr only
+	LogNoStd  bool   // if true with LogFile, do not also write stderr
+	AccessLog bool   // per-dial access lines
 
 	// ops
-	StatsAddr string // e.g. 127.0.0.1:9090 ; empty = disabled
-	ShowVersion bool
+	StatsAddr     string // e.g. 127.0.0.1:9090 ; empty = disabled
+	ShowVersion   bool
+	WatchInterval int // seconds between watchdog probes; 0 = off
+	WatchFails    int // failed probes in a row before exiting; 0 = never exit
 
 	Strategy rule.Strategy
 }
@@ -50,6 +52,7 @@ func parseConfig() *Config {
 	conf.RefreshInterval = 3600
 	conf.DialRetries = 3
 	conf.LogLevel = "info"
+	conf.WatchInterval = 60
 
 	flag.BoolVar(&conf.ShowVersion, "version", false, "打印版本并退出")
 	flag.StringSliceVar(&conf.SubURLs, "u", nil, "订阅链接（支持 v2rayN base64 列表 / Clash YAML）")
@@ -74,6 +77,8 @@ dh: 目的地址哈希(同目标粘滞)`)
 	flag.BoolVar(&conf.LogNoStd, "log-nostd", false, "写文件时不再同时输出到 stderr")
 	flag.BoolVar(&conf.AccessLog, "access-log", false, "记录每次拨号访问日志(目标/节点/耗时)")
 	flag.StringVar(&conf.StatsAddr, "stats", "", "统计 HTTP 监听地址，如 127.0.0.1:9090；空则关闭")
+	flag.IntVar(&conf.WatchInterval, "wi", 60, "看门狗: 每隔几秒经本地监听抓一次健康检测 URL，结果见 /stats；0 表示关闭")
+	flag.IntVar(&conf.WatchFails, "wf", 0, "看门狗: 有可用节点但连续几次抓取失败就退出，交给 systemd 重启；0 表示不退出")
 
 	flag.Usage = func() {
 		fmt.Fprint(flag.Output(), usageText)

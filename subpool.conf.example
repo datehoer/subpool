@@ -32,5 +32,10 @@ level=info
 # 统计 HTTP（空=关闭）
 # stats=127.0.0.1:9090
 
+# 看门狗: 每隔 wi 秒经本地监听抓一次健康检测 URL（0=关闭）;
+# 有可用节点却连续 wf 次失败就退出，交给 systemd 重启（0=不退出）
+wi=60
+# wf=5
+
 # 详细（等价 level=debug）
 # v=false

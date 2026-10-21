@@ -53,6 +53,10 @@ subpool -config ./subpool.conf
   -access-log        每次拨号访问日志
   -stats HOST:PORT   HTTP 统计 /stats /healthz
 
+看门狗:
+  -wi 60             每 60 秒经本地监听抓一次健康检测 URL
+  -wf 5              有可用节点却连续 5 次失败就退出（配合 systemd 重启）
+
 测试:
   curl -sx http://127.0.0.1:6666 https://api.ipify.org
   curl -s http://127.0.0.1:9090/stats

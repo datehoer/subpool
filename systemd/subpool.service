@@ -4,11 +4,13 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# subpool 启动好后发 READY=1，之后定时报平安；超过 WatchdogSec 没报（卡死）就被重启
+Type=notify
+WatchdogSec=120
 WorkingDirectory=/opt/subpool
 ExecStart=/opt/subpool/subpool -config /opt/subpool/subpool.conf
-Restart=on-failure
-RestartSec=3
+Restart=always
+RestartSec=30
 LimitNOFILE=1048576
 
 # 可选：降权用户

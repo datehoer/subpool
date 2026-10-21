@@ -59,6 +59,15 @@ type StatsSnapshot struct {
 	CheckEvery  int    `json:"check_interval_sec"`
 }
 
+// NodeStat is one node in /stats. The node URL is left out: it holds the node's credentials.
+type NodeStat struct {
+	Addr      string `json:"addr"`
+	Kind      string `json:"kind"` // protocols of the chain, e.g. "trojan" or "simple-obfs+ss"
+	Enabled   bool   `json:"enabled"`
+	LatencyMs int64  `json:"latency_ms"`
+	Failures  uint32 `json:"failures"`
+}
+
 // New creates an empty HotPool.
 func New(strategy rule.Strategy) *HotPool {
 	if strategy.CheckInterval <= 0 {
@@ -489,6 +498,30 @@ func (p *HotPool) Snapshot() StatsSnapshot {
 		AccessLog:   p.accessLog,
 		CheckEvery:  p.strategy.CheckInterval,
 	}
+}
+
+// Nodes returns every node with its health-check state.
+func (p *HotPool) Nodes() []NodeStat {
+	p.mu.RLock()
+	fwdrs := p.fwdrs // Swap installs a new slice, so this one stays intact
+	p.mu.RUnlock()
+	nodes := make([]NodeStat, 0, len(fwdrs))
+	for _, f := range fwdrs {
+		var kinds []string
+		for _, part := range strings.Split(strings.SplitN(f.URL(), "#", 2)[0], ",") {
+			if i := strings.Index(part, "://"); i > 0 {
+				kinds = append(kinds, part[:i])
+			}
+		}
+		nodes = append(nodes, NodeStat{
+			Addr:      f.Addr(),
+			Kind:      strings.Join(kinds, "+"),
+			Enabled:   f.Enabled(),
+			LatencyMs: f.Latency() / int64(time.Millisecond),
+			Failures:  f.Failures(),
+		})
+	}
+	return nodes
 }
 
 // --- health check ---

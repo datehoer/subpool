@@ -77,6 +77,8 @@ curl -s http://127.0.0.1:9090/healthz
 | **`-log-nostd`** | 有文件时不再打 stderr | `false` |
 | **`-access-log`** | 每次拨号访问日志 | `false` |
 | **`-stats`** | 统计 HTTP，如 `127.0.0.1:9090` | 空=关 |
+| **`-wi`** | 看门狗探测间隔（秒），`0` 关 | `60` |
+| **`-wf`** | 节点看起来可用但连续几次探测失败就退出，`0` 不退出 | `0` |
 | **`-version`** | 打印版本退出 | |
 | `-v` | 兼容旧参数，等价 `-level debug` | |
 | `-config` | conflag 配置文件 | |
@@ -108,8 +110,12 @@ INFO [access] tcp api.ipify.org:443 via node.example:443 ok 120ms tries=1
 
 ### 统计 HTTP
 
-- `GET /stats` 或 `/` — JSON（节点数、拨号成功/失败、uptime…）
+- `GET /stats` 或 `/` — JSON：`pool`（节点数、拨号成功/失败、uptime…）、`subscribe`（最近一次加载订阅的时间、节点数和错误）、`watchdog`（最近一天的探测结果）、`nodes`（地址、协议、健康状态、延迟；节点 URL 含密码，不输出）
 - `GET /healthz` — 有存活节点则 `ok`
+
+### 看门狗
+
+每隔 `-wi` 秒经自己的第一个监听抓一次健康检查 URL（`-c`），走的是客户端的路径，结果见 `/stats`。设了 `-wf N` 时，节点仍能通过健康检查、探测却连续失败 N 次，说明进程卡住了，就退出交给 systemd 重启。节点全挂是上游的问题，重启也没用，所以不会因此退出。在 systemd 下设了 `WatchdogSec` 时，SubPool 还会定时向 systemd 报平安，而且只在拿得到节点池的锁时才报，死锁了也会被重启。
 
 ## 目录
 
@@ -137,6 +143,8 @@ sudo cp systemd/subpool.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now subpool
 ```
+
+unit 用 `Type=notify`、`WatchdogSec=120` 和 `Restart=always`；配置里加 `wf=5`，探测连续失败时也会重启。
 
 ## 开发
 

@@ -77,6 +77,8 @@ curl -s http://127.0.0.1:9090/healthz
 | **`-log-nostd`** | When a log file is set, skip stderr | `false` |
 | **`-access-log`** | Per-dial access log | `false` |
 | **`-stats`** | Stats HTTP, e.g. `127.0.0.1:9090` | empty = off |
+| **`-wi`** | Watchdog probe interval (seconds), `0` = off | `60` |
+| **`-wf`** | Exit after this many failed probes in a row while nodes look alive, `0` = never | `0` |
 | **`-version`** | Print version and exit | |
 | `-v` | Legacy flag, same as `-level debug` | |
 | `-config` | conflag config file | |
@@ -108,8 +110,12 @@ INFO [access] tcp api.ipify.org:443 via node.example:443 ok 120ms tries=1
 
 ### Stats HTTP
 
-- `GET /stats` or `/` — JSON (node count, dial success/fail, uptime, …)
+- `GET /stats` or `/` — JSON: `pool` (node count, dial success/fail, uptime, …), `subscribe` (time, node count and error of the latest load), `watchdog` (the last day of probes) and `nodes` (address, protocol, health, latency; node URLs are left out because they hold credentials)
 - `GET /healthz` — `ok` when at least one live node exists
+
+### Watchdog
+
+Every `-wi` seconds SubPool fetches the health-check URL (`-c`) through its own first listener, the path clients take. Probe results appear in `/stats`. With `-wf N`, N failed probes in a row while nodes still pass their health checks mean the process is stuck, so it exits and lets systemd restart it. An empty pool is an upstream outage that a restart can't fix, so it never triggers an exit. Under systemd with `WatchdogSec`, SubPool also pings systemd, and only while its pool lock is free, so a deadlock gets the service restarted too.
 
 ## Layout
 
@@ -137,6 +143,8 @@ sudo cp systemd/subpool.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now subpool
 ```
+
+The unit uses `Type=notify` with `WatchdogSec=120` and `Restart=always`; add `wf=5` to the config to also restart on failed probes.
 
 ## Development
 

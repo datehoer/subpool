@@ -80,3 +80,27 @@ func TestSwapWithHealthChecksDisabledEnablesAllForwarders(t *testing.T) {
 		t.Fatalf("pool stats = %d total, %d available; want 2, 2", total, available)
 	}
 }
+
+func TestFailedDialReturnsADialer(t *testing.T) {
+	proxy.RegisterDialer("lifecycle-test", func(rawURL string, _ proxy.Dialer) (proxy.Dialer, error) {
+		return &lifecycleDialer{addr: rawURL}, nil
+	})
+
+	p := New(rule.Strategy{Check: "disable"})
+	if err := p.Swap([]string{"lifecycle-test://one"}); err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	empty := New(rule.Strategy{Check: "disable"})
+
+	for name, pool := range map[string]*HotPool{"one node": p, "empty": empty} {
+		if _, d, err := pool.Dial("tcp", "example.com:80"); err == nil || d == nil {
+			t.Fatalf("%s: Dial = (dialer %v, err %v); want an error and a dialer", name, d, err)
+		} else {
+			_ = d.Addr()
+		}
+		if _, d, err := pool.DialUDP("udp", "example.com:53"); err == nil || d == nil {
+			t.Fatalf("%s: DialUDP = (dialer %v, err %v); want an error and a dialer", name, d, err)
+		}
+	}
+}

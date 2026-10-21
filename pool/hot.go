@@ -250,6 +250,10 @@ func (p *HotPool) rebuildAvail() {
 
 // --- proxy.Proxy ---
 
+// glider's HTTP and SOCKS5 servers log dialer.Addr() when a dial fails, so a failed Dial returns
+// the last forwarder it tried, or this empty one; a nil dialer there crashes the process.
+var noForwarder = &rule.Forwarder{}
+
 func (p *HotPool) Dial(network, addr string) (net.Conn, proxy.Dialer, error) {
 	retries := p.dialRetries
 	if retries <= 0 {
@@ -257,6 +261,7 @@ func (p *HotPool) Dial(network, addr string) (net.Conn, proxy.Dialer, error) {
 	}
 	tried := make(map[*rule.Forwarder]struct{}, retries)
 	var lastErr error
+	last := noForwarder
 	start := time.Now()
 
 	for i := 0; i < retries; i++ {
@@ -265,6 +270,7 @@ func (p *HotPool) Dial(network, addr string) (net.Conn, proxy.Dialer, error) {
 			break
 		}
 		tried[d] = struct{}{}
+		last = d
 
 		c, err := d.Dial(network, addr)
 		if err == nil {
@@ -289,7 +295,7 @@ func (p *HotPool) Dial(network, addr string) (net.Conn, proxy.Dialer, error) {
 	if p.accessLog {
 		xlog.Accessf("tcp %s FAIL %dms tries=%d err=%v", addr, time.Since(start).Milliseconds(), len(tried), lastErr)
 	}
-	return nil, nil, lastErr
+	return nil, last, lastErr
 }
 
 func (p *HotPool) DialUDP(network, addr string) (net.PacketConn, proxy.UDPDialer, error) {
@@ -299,6 +305,7 @@ func (p *HotPool) DialUDP(network, addr string) (net.PacketConn, proxy.UDPDialer
 	}
 	tried := make(map[*rule.Forwarder]struct{}, retries)
 	var lastErr error
+	last := noForwarder
 	start := time.Now()
 
 	for i := 0; i < retries; i++ {
@@ -307,6 +314,7 @@ func (p *HotPool) DialUDP(network, addr string) (net.PacketConn, proxy.UDPDialer
 			break
 		}
 		tried[d] = struct{}{}
+		last = d
 		pc, err := d.DialUDP(network, addr)
 		if err == nil {
 			p.dialOK.Add(1)
@@ -321,7 +329,7 @@ func (p *HotPool) DialUDP(network, addr string) (net.PacketConn, proxy.UDPDialer
 	if lastErr == nil {
 		lastErr = errors.New("no available forwarder")
 	}
-	return nil, nil, lastErr
+	return nil, last, lastErr
 }
 
 func (p *HotPool) NextDialer(dstAddr string) proxy.Dialer {

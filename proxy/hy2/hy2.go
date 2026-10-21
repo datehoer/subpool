@@ -148,6 +148,18 @@ func (h *Hy2) invalidate() {
 	}
 }
 
+// Close releases the persistent QUIC client and its UDP socket.
+func (h *Hy2) Close() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.client == nil {
+		return nil
+	}
+	err := h.client.Close()
+	h.client = nil
+	return err
+}
+
 func (h *Hy2) getClient() (client.Client, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

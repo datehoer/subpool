@@ -25,37 +25,38 @@ type HotPool struct {
 	dialRetries int
 	accessLog   bool
 
-	mu       sync.RWMutex
-	fwdrs    []*rule.Forwarder
-	avail    []*rule.Forwarder
-	index    uint32
-	wrrMu    sync.Mutex
-	wrrCurr  map[*rule.Forwarder]int
-	cancel   context.CancelFunc
-	gen      uint64
-	rng      *rand.Rand
-	rngMu    sync.Mutex
-	started  time.Time
+	swapMu  sync.Mutex
+	mu      sync.RWMutex
+	fwdrs   []*rule.Forwarder
+	avail   []*rule.Forwarder
+	index   uint32
+	wrrMu   sync.Mutex
+	wrrCurr map[*rule.Forwarder]int
+	cancel  context.CancelFunc
+	gen     uint64
+	rng     *rand.Rand
+	rngMu   sync.Mutex
+	started time.Time
 
 	// stats
-	dialOK   atomic.Uint64
-	dialFail atomic.Uint64
+	dialOK    atomic.Uint64
+	dialFail  atomic.Uint64
 	dialRetry atomic.Uint64
 }
 
 // StatsSnapshot is exported pool stats for /stats.
 type StatsSnapshot struct {
-	Generation   uint64 `json:"generation"`
-	Total        int    `json:"total_nodes"`
-	Available    int    `json:"available_nodes"`
-	Strategy     string `json:"strategy"`
-	DialRetries  int    `json:"dial_retries"`
-	DialOK       uint64 `json:"dial_ok"`
-	DialFail     uint64 `json:"dial_fail"`
-	DialRetry    uint64 `json:"dial_retry"`
-	UptimeSec    int64  `json:"uptime_sec"`
-	AccessLog    bool   `json:"access_log"`
-	CheckEvery   int    `json:"check_interval_sec"`
+	Generation  uint64 `json:"generation"`
+	Total       int    `json:"total_nodes"`
+	Available   int    `json:"available_nodes"`
+	Strategy    string `json:"strategy"`
+	DialRetries int    `json:"dial_retries"`
+	DialOK      uint64 `json:"dial_ok"`
+	DialFail    uint64 `json:"dial_fail"`
+	DialRetry   uint64 `json:"dial_retry"`
+	UptimeSec   int64  `json:"uptime_sec"`
+	AccessLog   bool   `json:"access_log"`
+	CheckEvery  int    `json:"check_interval_sec"`
 }
 
 // New creates an empty HotPool.
@@ -105,22 +106,46 @@ func (p *HotPool) Swap(forwards []string) error {
 	if len(forwards) == 0 {
 		return errors.New("no forwarders")
 	}
+	p.swapMu.Lock()
+	defer p.swapMu.Unlock()
+
+	p.mu.RLock()
+	reusable := make(map[string][]*rule.Forwarder, len(p.fwdrs))
+	for _, f := range p.fwdrs {
+		reusable[f.URL()] = append(reusable[f.URL()], f)
+	}
+	p.mu.RUnlock()
 
 	dialTO := time.Duration(p.strategy.DialTimeout) * time.Second
 	relayTO := time.Duration(p.strategy.RelayTimeout) * time.Second
 
-	var fwdrs []*rule.Forwarder
+	fwdrs := make([]*rule.Forwarder, 0, len(forwards))
 	for _, chain := range forwards {
+		if existing := reusable[chain]; len(existing) > 0 {
+			f := existing[len(existing)-1]
+			reusable[chain] = existing[:len(existing)-1]
+			f.SetMaxFailures(uint32(p.strategy.MaxFailures))
+			fwdrs = append(fwdrs, f)
+			continue
+		}
 		f, err := rule.ForwarderFromURL(chain, p.strategy.IntFace, dialTO, relayTO)
 		if err != nil {
 			xlog.Warnf("[pool] skip invalid forwarder %s: %v", chain, err)
 			continue
 		}
 		f.SetMaxFailures(uint32(p.strategy.MaxFailures))
+		f.AddHandler(func(fw *rule.Forwarder) {
+			p.onStatusChanged(fw)
+		})
 		fwdrs = append(fwdrs, f)
 	}
 	if len(fwdrs) == 0 {
 		return errors.New("no valid forwarders after parse")
+	}
+
+	var stale []*rule.Forwarder
+	for _, old := range reusable {
+		stale = append(stale, old...)
 	}
 
 	p.mu.Lock()
@@ -137,22 +162,17 @@ func (p *HotPool) Swap(forwards []string) error {
 	p.wrrMu.Lock()
 	p.wrrCurr = make(map[*rule.Forwarder]int)
 	p.wrrMu.Unlock()
+	p.rebuildAvail()
+	p.mu.Unlock()
 
 	if len(fwdrs) == 1 {
 		fwdrs[0].Enable()
-		p.avail = []*rule.Forwarder{fwdrs[0]}
-		p.mu.Unlock()
+		closeForwarders(stale)
 		xlog.Infof("[pool] gen=%d loaded 1 node strategy=%s", gen, p.strategy.Strategy)
 		return nil
 	}
 
-	for _, f := range fwdrs {
-		f.AddHandler(func(fw *rule.Forwarder) {
-			p.onStatusChanged(fw)
-		})
-	}
-	p.rebuildAvail()
-	p.mu.Unlock()
+	closeForwarders(stale)
 
 	xlog.Infof("[pool] gen=%d loaded %d nodes, strategy=%s, dial-retries=%d, check every %ds",
 		gen, len(fwdrs), p.strategy.Strategy, p.dialRetries, p.strategy.CheckInterval)
@@ -160,10 +180,10 @@ func (p *HotPool) Swap(forwards []string) error {
 	checker, err := newChecker(p.strategy)
 	if err != nil {
 		xlog.Warnf("[pool] health check disabled: %v", err)
-		p.mu.Lock()
 		for _, f := range fwdrs {
 			f.Enable()
 		}
+		p.mu.Lock()
 		p.rebuildAvail()
 		p.mu.Unlock()
 		return nil
@@ -177,11 +197,33 @@ func (p *HotPool) Swap(forwards []string) error {
 
 // Close stops health checks.
 func (p *HotPool) Close() {
+	p.swapMu.Lock()
+	defer p.swapMu.Unlock()
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if p.cancel != nil {
 		p.cancel()
 		p.cancel = nil
+	}
+	fwdrs := p.fwdrs
+	p.fwdrs = nil
+	p.avail = nil
+	p.mu.Unlock()
+	closeForwarders(fwdrs)
+}
+
+type dialerCloser interface {
+	Close() error
+}
+
+func closeForwarders(forwarders []*rule.Forwarder) {
+	for _, f := range forwarders {
+		closer, ok := f.Dialer.(dialerCloser)
+		if !ok {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			xlog.Warnf("[pool] close retired forwarder failed: %v", err)
+		}
 	}
 }
 

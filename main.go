@@ -100,8 +100,8 @@ func main() {
 }
 
 func reload(hot *pool.HotPool, conf *Config, fatalOnEmpty bool) (err error) {
-	forwards, err := subscribe.LoadAll(conf.SubURLs, conf.SubFiles)
-	defer func() { noteRefresh(len(forwards), err) }()
+	forwards, each, err := subscribe.LoadAll(conf.SubURLs, conf.SubFiles)
+	defer func() { noteRefresh(len(forwards), each, conf, err) }()
 	if err != nil {
 		return err
 	}

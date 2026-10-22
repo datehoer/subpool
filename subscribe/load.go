@@ -17,9 +17,16 @@ type Source struct {
 	Path string
 }
 
+// Loaded is what one source gave at a load.
+type Loaded struct {
+	Forwards []string
+	Err      error
+	Took     time.Duration
+}
+
 // LoadAll loads all sources, auto-detects v2rayN base64 list vs Clash YAML,
-// and returns unique glider forward URLs.
-func LoadAll(urls, files []string) ([]string, error) {
+// and returns unique glider forward URLs, plus what each source gave (URLs first, then files).
+func LoadAll(urls, files []string) ([]string, []Loaded, error) {
 	var sources []Source
 	for _, u := range urls {
 		sources = append(sources, Source{Kind: "url", Path: u})
@@ -30,12 +37,15 @@ func LoadAll(urls, files []string) ([]string, error) {
 	return LoadSources(sources)
 }
 
-// LoadSources loads and converts multiple subscription sources.
-func LoadSources(sources []Source) ([]string, error) {
+// LoadSources loads and converts multiple subscription sources; a failing source is skipped.
+func LoadSources(sources []Source) ([]string, []Loaded, error) {
 	var all []string
 	var lastErr error
-	for _, s := range sources {
+	each := make([]Loaded, len(sources))
+	for i, s := range sources {
+		start := time.Now()
 		nodes, err := LoadSource(s)
+		each[i] = Loaded{Forwards: nodes, Err: err, Took: time.Since(start)}
 		if err != nil {
 			lastErr = err
 			continue
@@ -45,11 +55,11 @@ func LoadSources(sources []Source) ([]string, error) {
 	all = uniqueStrings(all)
 	if len(all) == 0 {
 		if lastErr != nil {
-			return nil, lastErr
+			return nil, each, lastErr
 		}
-		return nil, fmt.Errorf("no valid nodes from subscriptions")
+		return nil, each, fmt.Errorf("no valid nodes from subscriptions")
 	}
-	return all, nil
+	return all, each, nil
 }
 
 // LoadSource loads one URL or file and converts to glider forwards.

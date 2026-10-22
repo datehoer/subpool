@@ -61,6 +61,7 @@ type StatsSnapshot struct {
 
 // NodeStat is one node in /stats. The node URL is left out: it holds the node's credentials.
 type NodeStat struct {
+	URL       string `json:"-"`
 	Addr      string `json:"addr"`
 	Kind      string `json:"kind"` // protocols of the chain, e.g. "trojan" or "simple-obfs+ss"
 	Enabled   bool   `json:"enabled"`
@@ -514,6 +515,7 @@ func (p *HotPool) Nodes() []NodeStat {
 			}
 		}
 		nodes = append(nodes, NodeStat{
+			URL:       f.URL(),
 			Addr:      f.Addr(),
 			Kind:      strings.Join(kinds, "+"),
 			Enabled:   f.Enabled(),

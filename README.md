@@ -167,5 +167,7 @@ Please also comply with the licenses of upstream projects.
 ## Security
 
 - Keep real subscription URLs, node passwords, and credentials in local config only (e.g. `subpool.conf`), which is gitignored by default
+- Config backups, `.env` files, `subscriptions/`, logs and local `.learnings/` notes are also ignored; keep reusable examples in `subpool.conf.example`
+- Logs redact URL credentials, paths, query strings and fragments; log files use owner-only permissions. Stats still show subscription origins and node addresses
 - If you expose the stats endpoint, add access control yourself
 - Report vulnerabilities via GitHub Security Advisories or private contact; do not paste secrets in public issues

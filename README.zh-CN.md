@@ -167,5 +167,7 @@ go build -o subpool .
 ## 安全说明
 
 - 真实订阅 URL、节点密码、认证信息只应放在本地配置（如 `subpool.conf`），且已被 `.gitignore` 忽略
+- 配置备份、`.env` 文件、`subscriptions/`、日志和本地 `.learnings/` 运维记录也会被忽略；可复用示例放在 `subpool.conf.example`
+- 日志会隐藏 URL 中的认证信息、路径、查询参数和片段，日志文件仅当前用户可读写；统计接口仍展示订阅来源域名与节点地址
 - 若 `stats` 暴露在公网，请自行做好访问控制
 - 漏洞报告请通过 GitHub Security Advisories 或私信维护者，勿在公开 issue 中贴敏感信息

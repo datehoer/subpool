@@ -3,10 +3,11 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"net/url"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/datehoer/subpool/pkg/redact"
 	"github.com/datehoer/subpool/pkg/xlog"
 	"github.com/datehoer/subpool/pool"
 	"github.com/datehoer/subpool/subscribe"
@@ -42,15 +43,12 @@ func noteRefresh(nodes int, each []subscribe.Loaded, conf *Config, err error) {
 	for i, l := range each {
 		s := sourceState{Kind: "url", Nodes: len(l.Forwards), Ms: l.Took.Milliseconds(), forwards: l.Forwards}
 		if i < len(conf.SubURLs) {
-			s.Name = "?"
-			if u, _ := url.Parse(conf.SubURLs[i]); u != nil && u.Host != "" {
-				s.Name = u.Scheme + "://" + u.Host
-			}
+			s.Name = redact.URL(conf.SubURLs[i])
 		} else {
-			s.Kind, s.Name = "file", conf.SubFiles[i-len(conf.SubURLs)]
+			s.Kind, s.Name = "file", filepath.Base(conf.SubFiles[i-len(conf.SubURLs)])
 		}
 		if l.Err != nil {
-			s.Error = redact(l.Err.Error())
+			s.Error = redact.Text(l.Err.Error())
 		}
 		sources[i] = s
 	}
@@ -58,7 +56,7 @@ func noteRefresh(nodes int, each []subscribe.Loaded, conf *Config, err error) {
 	defer refreshMu.Unlock()
 	lastRefresh = refreshState{At: time.Now(), Nodes: nodes, Sources: sources}
 	if err != nil {
-		lastRefresh.Error = redact(err.Error())
+		lastRefresh.Error = redact.Text(err.Error())
 	}
 }
 

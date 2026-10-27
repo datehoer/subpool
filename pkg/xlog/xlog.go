@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/datehoer/subpool/pkg/redact"
 )
 
 // Level is log severity.
@@ -111,8 +113,13 @@ func (l *Logger) openFileLocked(now time.Time) error {
 		}
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
+		return err
+	}
+	// OpenFile's mode only applies to new files; also protect existing logs.
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
 		return err
 	}
 	if l.file != nil {
@@ -145,7 +152,7 @@ func (l *Logger) logf(lv Level, format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.maybeRotateLocked()
-	msg := fmt.Sprintf(format, args...)
+	msg := redact.Text(fmt.Sprintf(format, args...))
 	line := fmt.Sprintf("%s %s %s\n", time.Now().Format("2006/01/02 15:04:05"), lv.String(), msg)
 	_, _ = io.WriteString(l.out, line)
 }

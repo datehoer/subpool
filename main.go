@@ -58,7 +58,7 @@ func main() {
 	for _, listen := range conf.Listens {
 		local, err := proxy.ServerFromURL(listen, hot)
 		if err != nil {
-			xlog.Errorf("listen %s: %v", listen, err)
+			xlog.Errorf("listen %q: %v", listen, err)
 			os.Exit(1)
 		}
 		go local.ListenAndServe()

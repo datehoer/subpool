@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	stdlog "log"
 	"os"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/nadoo/glider/pkg/log"
 	"github.com/nadoo/glider/rule"
 
+	"github.com/datehoer/subpool/pkg/redact"
 	"github.com/datehoer/subpool/pkg/xlog"
 )
 
@@ -38,6 +40,8 @@ type Config struct {
 }
 
 func parseConfig() *Config {
+	// glider uses the standard logger, including for failed-auth credentials.
+	stdlog.SetOutput(redact.Writer{Writer: os.Stderr})
 	conf := &Config{}
 	flag := conflag.New()
 	flag.SetOutput(os.Stdout)
@@ -87,7 +91,7 @@ dh: 目的地址哈希(同目标粘滞)`)
 	}
 
 	if err := flag.Parse(); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: %s\n", redact.Text(err.Error()))
 		os.Exit(-1)
 	}
 
@@ -104,7 +108,7 @@ dh: 目的地址哈希(同目标粘滞)`)
 	// alsoStderr: always when no file; with file unless -log-nostd
 	alsoStd := conf.LogFile == "" || !conf.LogNoStd
 	if err := xlog.Configure(conf.LogLevel, conf.LogFile, alsoStd); err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: log init: %s\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: log init: %s\n", redact.Text(err.Error()))
 		os.Exit(-1)
 	}
 

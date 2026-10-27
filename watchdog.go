@@ -7,12 +7,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/datehoer/subpool/pkg/redact"
 	"github.com/datehoer/subpool/pkg/xlog"
 	"github.com/datehoer/subpool/pool"
 )
@@ -52,7 +52,7 @@ func (w *watchdog) snapshot(conf *Config) watchdogSnapshot {
 		IntervalSec: conf.WatchInterval,
 		FailLimit:   conf.WatchFails,
 		FailsInARow: w.fails,
-		Target:      probeTarget(conf),
+		Target:      redact.URL(probeTarget(conf)),
 		Probes:      append([]probe{}, w.probes...),
 	}
 }
@@ -110,7 +110,7 @@ func startWatchdog(conf *Config, hot *pool.HotPool) {
 			if err == nil {
 				p.Ms = time.Since(start).Milliseconds()
 			} else {
-				p.Err = redact(err.Error())
+				p.Err = redact.Text(err.Error())
 			}
 
 			wd.mu.Lock()
@@ -170,11 +170,4 @@ func sdNotify(state string) {
 	}
 	defer conn.Close()
 	_, _ = conn.Write([]byte(state))
-}
-
-var urlRE = regexp.MustCompile(`(https?://)[^\s"]+`)
-
-// redact hides URLs in error texts: subscription URLs carry their access token.
-func redact(s string) string {
-	return urlRE.ReplaceAllString(s, "${1}…")
 }

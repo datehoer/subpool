@@ -140,7 +140,7 @@ func (p *HotPool) Swap(forwards []string) error {
 		}
 		f, err := rule.ForwarderFromURL(chain, p.strategy.IntFace, dialTO, relayTO)
 		if err != nil {
-			xlog.Warnf("[pool] skip invalid forwarder %s: %v", chain, err)
+			xlog.Warnf("[pool] skip invalid forwarder %q: %v", chain, err)
 			continue
 		}
 		f.SetMaxFailures(uint32(p.strategy.MaxFailures))
